@@ -221,6 +221,7 @@ public class DocumentActionsPermissionBase {
 		validateDocumentType( documentType );
 		validateRouteNodeNames( routeNodeNames );
 		validateDocumentStatus( documentStatus );
+		validatePrincipalId( initiatorPrincipalId );
 		// no need to validate appdocstatus, this is a free-form application defined value
 
 		// add appDocStatus to the details
@@ -231,28 +232,24 @@ public class DocumentActionsPermissionBase {
 			}
 		}
 
-		boolean foundAtLeastOnePermission = false;
-		boolean authorizedByPermission = false;
 		boolean principalIsInitiator = StringUtils.equals( initiatorPrincipalId, principalId );
+		if ( principalIsInitiator ) {
+			return true;
+		}
+		PermissionService permissionService = getPermissionService();
 
 		// loop over permission details, only one of them needs to be authorized
 		for ( Map<String, String> permissionDetails : permissionDetailList ) {
 			Map<String, String> roleQualifiers = buildDocumentRoleQualifiers( document, permissionDetails.get( KewApiConstants.ROUTE_NODE_NAME_DETAIL ) );
-			if ( useKimPermission( KewApiConstants.KEW_NAMESPACE, KewApiConstants.RECALL_PERMISSION, permissionDetails, false ) ) {
-				if ( getPermissionService().isPermissionDefinedByTemplate( KewApiConstants.KEW_NAMESPACE, KewApiConstants.RECALL_PERMISSION, permissionDetails ) ) {
-					foundAtLeastOnePermission = true;
-					if ( getPermissionService().isAuthorizedByTemplate( principalId, KewApiConstants.KEW_NAMESPACE, KewApiConstants.RECALL_PERMISSION, permissionDetails, roleQualifiers ) ) {
-						return true;
-					}
+			boolean useKimPermission = useKimPermission( KewApiConstants.KEW_NAMESPACE, KewApiConstants.RECALL_PERMISSION, permissionDetails, false );
+			if ( useKimPermission ) {
+				boolean isAuthorizedByTemplate = permissionService.isAuthorizedByTemplate( principalId, KewApiConstants.KEW_NAMESPACE, KewApiConstants.RECALL_PERMISSION, permissionDetails, roleQualifiers );
+				if ( isAuthorizedByTemplate ) {
+					return true;
 				}
 			}
 		}
-		if ( foundAtLeastOnePermission ) {
-			return false;
-		}
-		// alternative could be to only authorize initiator if the permission is omitted
-		// (i.e. exclude initiator if the initiator does not have the recall permission)
-		return authorizedByPermission;
+		return false;
 	}
 
 	/**
