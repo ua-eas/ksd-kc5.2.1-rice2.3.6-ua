@@ -74,6 +74,7 @@ import org.springframework.util.MultiValueMap;
 
 import javax.jws.WebParam;
 import javax.xml.namespace.QName;
+
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -90,6 +91,10 @@ import static org.kuali.rice.core.api.criteria.PredicateFactory.equal;
 public class RoleServiceImpl extends RoleServiceBase implements RoleService {
     private static final Logger LOG = Logger.getLogger(RoleServiceImpl.class);
 
+    // Used by hasPropDevAggregatorRole(...)
+    private static final String PROP_DEV_AGGREGATOR_ROLE_ID = "1109";
+    private static final String PROPOSAL_QUALIFICATION_KEY = "proposal";
+    
     private static final Map<String, RoleDaoAction> memberTypeToRoleDaoActionMap = populateMemberTypeToRoleDaoActionMap();
 
     private static Map<String, RoleDaoAction> populateMemberTypeToRoleDaoActionMap() {
@@ -1145,8 +1150,87 @@ public class RoleServiceImpl extends RoleServiceBase implements RoleService {
     }
 
 
+    /*
+     * UAR-896: Special case, need to short circuit for Proposal Development Aggregator role.
+     *          History: UA modified the app to open PropDev to anyone that can access the
+     *          system. This was accomplished by modifying KC logic to auto provision the
+     *          Aggregator role programmatically. The specs state that qualification should
+     *          *not* be taken into account when the person has role 1109, other than by
+     *          proposal number. However, since role 1109 is of KIM_TYPE "Unit", this service
+     *          will check qualifications, and users with role 1109 will validate as not-authorized.
+     *          This makes the "Recall" action fail for all except the intiator and users who
+     *          happen to already be associated with the associated unit(s) in the doc.
+     *          
+     *          This method will modify the qualification, and return true/false based on if the
+     *          principal has role 1109, and is an aggregator on the proposal.
+     *          
+     *          Do note, though, that other roles could test positive in principalHasRole().
+     *          
+     *          To summarize, we are skirting UnitRoleTypeService for just this one role.
+     */
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private boolean hasPropDevAggregatorRole(Context context, String principalId, List<String> roleIds, Map<String, String> qualification, boolean checkDelegations){    	
+
+    	// Prop Dev Aggregator role is not passed in, return false
+    	if(CollectionUtils.isEmpty(roleIds) || !roleIds.contains(PROP_DEV_AGGREGATOR_ROLE_ID)){
+    		return false;
+    	}
+
+    	// Strip Unit qualifiers
+    	Map minimalQualificationMap = new HashMap<String, String>();
+    	if(qualification != null && qualification.get(PROPOSAL_QUALIFICATION_KEY) != null){
+    		// Keep proposal number
+    		String proposalNumber = qualification.get(PROPOSAL_QUALIFICATION_KEY);
+    		minimalQualificationMap.put(PROPOSAL_QUALIFICATION_KEY, proposalNumber);
+    	}
+
+    	// Consult cache
+    	Boolean hasRole = getPrincipalHasRoleFromCache(principalId, PROP_DEV_AGGREGATOR_ROLE_ID, minimalQualificationMap, checkDelegations);
+   		if(hasRole != null){
+    		// Return what cache says
+    		return hasRole.booleanValue();
+    	}
+
+    	// Cache miss, check to ensure 1109 role is still active
+    	List roleIdList = Collections.singletonList(PROP_DEV_AGGREGATOR_ROLE_ID);
+    	List<Role> roles = loadRoles(roleIdList);
+    	if(CollectionUtils.isEmpty(roles)){
+    		// Role is not active
+    		return false;
+    	}
+
+    	// Not in cache, and role is active -- do manual check by Principal
+    	List<RoleMemberBo> matchingRoleMembers = getStoredRolePrincipalsForPrincipalIdAndRoleIds(roleIdList, principalId, minimalQualificationMap);
+    	if (CollectionUtils.isNotEmpty(matchingRoleMembers)) {
+    		// User has role by Principal, cache it, and return true
+    		putPrincipalHasRoleInCache(true, principalId, PROP_DEV_AGGREGATOR_ROLE_ID, minimalQualificationMap, checkDelegations);
+    		return true;
+    	}
+
+    	// Not in cache, role is active, not found by Principal -- check by Group
+    	if (CollectionUtils.isNotEmpty(context.getPrincipalGroupIds())) {
+            List<RoleMemberBo> matchingRoleGroupMembers = getStoredRoleGroupsUsingExactMatchOnQualification(context.getPrincipalGroupIds(), PROP_DEV_AGGREGATOR_ROLE_ID, minimalQualificationMap);
+            if (CollectionUtils.isNotEmpty(matchingRoleGroupMembers)) {
+            	// User has role by Group, cache it, and return true
+                putPrincipalHasRoleInCache(true, principalId, PROP_DEV_AGGREGATOR_ROLE_ID, minimalQualificationMap, checkDelegations);
+                return true;
+            }
+        }
+
+    	// Not in cache, role is active, not found by Principal, not found by Group
+    	return false;
+
+    }
+    
+    
     protected boolean principalHasRole(Context context, String principalId, List<String> roleIds, Map<String, String> qualification, boolean checkDelegations) {
 
+    	// Short circuit for Proposal Ddevelopment Aggregator role
+    	if(hasPropDevAggregatorRole(context, principalId, roleIds, qualification, checkDelegations)){
+    		return true;
+    	}
+    	
+    	
         /**
          * This method uses a multi-phase approach to determining if the given principal of any of the roles given based
          * on the qualification map that is pased.
