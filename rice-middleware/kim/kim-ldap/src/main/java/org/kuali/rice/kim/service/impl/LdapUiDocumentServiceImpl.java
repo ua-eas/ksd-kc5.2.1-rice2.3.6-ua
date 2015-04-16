@@ -402,21 +402,19 @@ public class LdapUiDocumentServiceImpl extends org.kuali.rice.kim.service.impl.U
         identityManagementRoleDocument.setKimType(KimApiServiceLocator.getKimTypeInfoService().getKimType(identityManagementRoleDocument.getRoleTypeId()));
         KimTypeService kimTypeService = KimFrameworkServiceLocator.getKimTypeService(identityManagementRoleDocument.getKimType());
 
-        if(CollectionUtils.isNotEmpty(identityManagementRoleDocument.getMembers())){
-            for(KimDocumentRoleMember documentRoleMember: identityManagementRoleDocument.getMembers()){
+        if(CollectionUtils.isNotEmpty(identityManagementRoleDocument.getModifiedMembers())){
+            for(KimDocumentRoleMember documentRoleMember: identityManagementRoleDocument.getModifiedMembers()){
                 origRoleMemberImplTemp = null;
 
                 newRoleMember = new RoleMemberBo();
                 KimCommonUtilsInternal.copyProperties(newRoleMember, documentRoleMember);
                 newRoleMember.setRoleId(identityManagementRoleDocument.getRoleId());
+                newRoleMember.setTypeCode(documentRoleMember.getMemberTypeCode()); 
                 if(ObjectUtils.isNotNull(origRoleMembers)){
                     for(RoleMemberBo origRoleMemberImpl: origRoleMembers){
                         if((origRoleMemberImpl.getRoleId()!=null && StringUtils.equals(origRoleMemberImpl.getRoleId(), newRoleMember.getRoleId())) &&
                             (origRoleMemberImpl.getMemberId()!=null && StringUtils.equals(origRoleMemberImpl.getMemberId(), newRoleMember.getMemberId())) &&
-                            (origRoleMemberImpl.getType()!=null && org.apache.commons.lang.ObjectUtils.equals(origRoleMemberImpl.getType(), newRoleMember.getType())) &&
-                            !origRoleMemberImpl.isActive(new Timestamp(System.currentTimeMillis())) &&
-                            !kimTypeService.validateUniqueAttributes(identityManagementRoleDocument.getKimType().getId(),
-                                    documentRoleMember.getQualifierAsMap(), origRoleMemberImpl.getAttributes()).isEmpty()) {
+                            (origRoleMemberImpl.getType()!=null && org.apache.commons.lang.ObjectUtils.equals(origRoleMemberImpl.getType(), newRoleMember.getType()))) {
 
                             //TODO: verify if you want to add  && newRoleMember.isActive() condition to if...
 
