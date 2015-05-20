@@ -43,7 +43,6 @@ public class KualiLogoutAction extends Action {
      */
     @Override
     public ActionForward execute(ActionMapping mapping, ActionForm form, HttpServletRequest request, HttpServletResponse response) throws Exception {
-
 		Person loggedIn = GlobalVariables.getUserSession().getPerson();
 		Person actualLoggedIn = GlobalVariables.getUserSession().getActualPerson();
 
