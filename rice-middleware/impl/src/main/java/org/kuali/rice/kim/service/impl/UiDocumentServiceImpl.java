@@ -727,6 +727,18 @@ public class UiDocumentServiceImpl implements UiDocumentService {
 		return (List<RoleMemberBo>)getBusinessObjectService().findMatching(RoleMemberBo.class, criteria);
 	}
 
+	protected List<RoleMemberBo> getRoleMembersForPrincipal( String roleId, String principalId ) {
+		if ( StringUtils.isBlank( roleId ) || StringUtils.isBlank( principalId ) ) {
+			return new ArrayList<RoleMemberBo>();
+		}
+		Map<String, String> criteria = new HashMap<String, String>();
+		criteria.put( "roleId", roleId );
+		criteria.put( "typeCode", MemberType.PRINCIPAL.getCode() );
+		criteria.put( "memberId", principalId );
+		List<RoleMemberBo> list = (List<RoleMemberBo>) getBusinessObjectService().findMatching( RoleMemberBo.class, criteria );
+		return list;
+	}
+
 	public RoleMemberBo getRoleMember(String id) {
 		if ( id == null ) {
 			return null;
@@ -1403,21 +1415,10 @@ public class UiDocumentServiceImpl implements UiDocumentService {
 	}
 
     protected List<RoleMemberBo> populateRoleMembers(IdentityManagementPersonDocument identityManagementPersonDocument) {
-		List<RoleBo> origRoles = getRolesForPrincipal(identityManagementPersonDocument.getPrincipalId());
-
 		List <RoleMemberBo> roleMembers = new ArrayList<RoleMemberBo>();
 		if(CollectionUtils.isNotEmpty(identityManagementPersonDocument.getRoles())){
 			for (PersonDocumentRole role : identityManagementPersonDocument.getRoles()) {
-				//if(role.isEditable()){
-					List<RoleMemberBo> origRoleMembers = new ArrayList<RoleMemberBo>();
-					if(ObjectUtils.isNotNull(origRoles)){
-						for (RoleBo origRole : origRoles) {
-							if (origRole.getId()!=null && StringUtils.equals(origRole.getId(), role.getRoleId())) {
-								origRoleMembers = origRole.getMembers();
-								break;
-							}
-						}
-					}
+					List<RoleMemberBo> origRoleMembers = getRoleMembersForPrincipal(role.getRoleId(), identityManagementPersonDocument.getPrincipalId());
 					if (role.getRolePrncpls().isEmpty()) {
 						if (!role.getDefinitions().isEmpty()) {
 							RoleMemberBo roleMemberImpl = new RoleMemberBo();
